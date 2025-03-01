@@ -1,10 +1,12 @@
 import os
 import textwrap
+import sounddevice as sd
 import scipy
 import numpy as np
 import av
 from pathlib import Path
-
+import logging
+import sys
 
 def clear_screen():
     """Clears the console screen."""
@@ -80,3 +82,55 @@ def resample(file: str, sr: int = 16000):
 
     output_container.close()
     return resampled_file
+
+
+
+
+def confirm_device_index_acceptable_as_microphone (proposed_index:int = 1) -> int:
+    """
+    make sure that the device index is acceptable.
+    """
+    s = sd.query_devices()
+    all_indices = list(map(lambda x: x["index"], s))
+    try_to_correct = False
+    if proposed_index not in all_indices:
+        logging.error("proposed device index is not among the available options")
+        try_to_correct = True
+    while try_to_correct:
+        try:
+            with sd.InputStream(device=proposed_index):
+                try_to_correct = False
+                pass
+        except Exception as e:
+            logging.error("problem with proposed device index: {e}")
+            try_to_correct = True
+
+        if try_to_correct:
+            print("your chosen input device was unusable.  Here are the available options.  Choose an index to continue, 'q' to exit the program.")
+            for d in s:
+                print(d)
+            index = input("prompt")
+            if index.strip()=='q':
+                sys.exit()
+            try:
+                sdi = int(index)
+            except ValueError:
+                print("invalid index -- only integers are allowable")
+                sys.exit()
+            proposed_index = sdi
+    return proposed_index
+
+
+
+def confirm_host_is_desirable (server_url:str|None) -> str:
+    """
+    make sure that the device index is acceptable.
+    """
+    if server_url is not None:
+        proposed_host = server_url
+    elif 'TRANSCRIPTION_SERVER' in os.environ:
+        proposed_host = os.environ['TRANSCRIPTION_SERVER']
+    else:
+        print("You must choose a server to perform transcriptions.  You can do it on the command line with --server, or you can set the environment variable TRANSCRIPTION_SERVER.")
+        sys.exit()
+    return proposed_host

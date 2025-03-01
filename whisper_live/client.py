@@ -13,6 +13,7 @@ import time
 import av
 import whisper_live.utils as utils
 
+logger = logging.getLogger(__name__)
 
 class Client:
     """
@@ -30,7 +31,7 @@ class Client:
         model="small",
         srt_file_path="output.srt",
         use_vad=True,
-        log_transcription=True,
+        log_transcription=False,
         max_clients=4,
         max_connection_time=600,
     ):
@@ -114,6 +115,9 @@ class Client:
 
     def process_segments(self, segments):
         """Processes transcript segments."""
+        if segments is None:
+            print(f" is this the message to capture? : {self.last_received_segment}")
+            return
         text = []
         for i, seg in enumerate(segments):
             if not text or text[-1] != seg["text"]:
@@ -129,11 +133,17 @@ class Client:
             self.last_response_received = time.time()
             self.last_received_segment = segments[-1]["text"]
 
+        if segments[-1]["completed"]:
+            print(f"here it is:")
+            utils.print_transcript(text[-1:])
+
         if self.log_transcription:
             # Truncate to last 3 entries for brevity.
             text = text[-3:]
             utils.clear_screen()
             utils.print_transcript(text)
+
+
 
     def on_message(self, ws, message):
         """
@@ -148,6 +158,8 @@ class Client:
             message (str): The received message from the server.
 
         """
+        if message is None:
+            print("message was none")
         message = json.loads(message)
 
         if self.uid != message.get("uid"):
@@ -177,6 +189,8 @@ class Client:
             )
             return
 
+        if message.get("segments",None) is None:
+            print(" segments was none here")
         if "segments" in message.keys():
             self.process_segments(message["segments"])
 
@@ -291,7 +305,8 @@ class TranscriptionTeeClient:
     Attributes:
         clients (list): the underlying Client instances responsible for handling WebSocket connections.
     """
-    def __init__(self, clients, save_output_recording=False, output_recording_filename="./output_recording.wav", mute_audio_playback=False):
+    def __init__(self, clients, save_output_recording=False, output_recording_filename="./output_recording.wav", mute_audio_playback=False,
+                 device_index=1):
         self.clients = clients
         if not self.clients:
             raise Exception("At least one client is required.")
@@ -305,6 +320,7 @@ class TranscriptionTeeClient:
         self.mute_audio_playback = mute_audio_playback
         self.frames = b""
         self.p = pyaudio.PyAudio()
+        self.dev_index = device_index
         try:
             self.stream = self.p.open(
                 format=self.format,
@@ -312,6 +328,7 @@ class TranscriptionTeeClient:
                 rate=self.rate,
                 input=True,
                 frames_per_buffer=self.chunk,
+                input_device_index=self.dev_index,
             )
         except OSError as error:
             print(f"[WARN]: Unable to access microphone. {error}")
@@ -496,6 +513,7 @@ class TranscriptionTeeClient:
             for packet in container.demux(audio_stream):
                 for frame in packet.decode():
                     audio_data = frame.to_ndarray().tobytes()
+                    logger.info(f"data size = {len(audio_data)}")
                     self.multicast_packet(audio_data)
 
                     if save_file:
@@ -704,11 +722,14 @@ class TranscriptionClient(TranscriptionTeeClient):
         save_output_recording=False,
         output_recording_filename="./output_recording.wav",
         output_transcription_path="./output.srt",
-        log_transcription=True,
+        log_transcription=False,
         max_clients=4,
         max_connection_time=600,
         mute_audio_playback=False,
+        device_index=1,
+        log_level=logging.INFO
     ):
+        logging.basicConfig(level=log_level)
         self.client = Client(
             host, port, lang, translate, model, srt_file_path=output_transcription_path,
             use_vad=use_vad, log_transcription=log_transcription, max_clients=max_clients,
@@ -724,5 +745,6 @@ class TranscriptionClient(TranscriptionTeeClient):
             [self.client],
             save_output_recording=save_output_recording,
             output_recording_filename=output_recording_filename,
-            mute_audio_playback=mute_audio_playback
+            mute_audio_playback=mute_audio_playback,
+            device_index=device_index
         )
