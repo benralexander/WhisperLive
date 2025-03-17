@@ -1,6 +1,6 @@
 import argparse
 import traceback
-import threading
+import whisper_live.programmatic_state_test
 from whisper_live.client import TranscriptionClient
 from whisper_live.utils import confirm_device_index_acceptable_as_microphone,confirm_host_is_desirable
 
@@ -17,9 +17,7 @@ def main_client(args,host:str,input_index:int):
         traceback_info = traceback.format_exc()
         print(traceback_info)
 
-
-
-if __name__ == "__main__":
+def arg_parser()->argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', '-p',
                         type=int,
@@ -41,7 +39,13 @@ if __name__ == "__main__":
                         default="INFO",
                         required=False,
                         help="Host for the server.")
-    args = parser.parse_args()
-    host=confirm_host_is_desirable(args.server)
-    input_index=confirm_device_index_acceptable_as_microphone(args.device_index)
-    main_client(args,host,input_index)
+
+
+if __name__ == "__main__":
+    args = arg_parser()
+    if args.foo:
+        whisper_live.programmatic_state_test.run_unit_tests()
+    else:
+        host=confirm_host_is_desirable(args.server)
+        input_index=confirm_device_index_acceptable_as_microphone(args.device_index)
+        main_client(args,host,input_index)
